@@ -5,7 +5,7 @@ REPO_URL="https://github.com/edwinshamel/hd2-mod-manager.git"
 INSTALL_DIR="$HOME/hd2-mod-manager"
 DESKTOP_FILE="$HOME/.local/share/applications/hd2-mod-manager.desktop"
 
-# Colores
+# Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -14,21 +14,21 @@ NC='\033[0m'
 
 info()    { echo -e "${BLUE}[INFO]${NC} $1"; }
 success() { echo -e "${GREEN}[OK]${NC} $1"; }
-warning() { echo -e "${YELLOW}[AVISO]${NC} $1"; }
+warning() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 error()   { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
 
 echo ""
-echo "  HD2 Mod Manager - Instalador"
-echo "  =============================="
+echo "  HD2 Mod Manager - Installer"
+echo "  ============================"
 echo ""
 
-# ── 1. Detectar gestor de paquetes ──────────────────────────────────────────
-info "Detectando gestor de paquetes..."
+# ── 1. Detect package manager ───────────────────────────────────────────────
+info "Detecting package manager..."
 
 if command -v apt &>/dev/null; then
     PKG_MANAGER="apt"
     PKG_INSTALL="sudo apt-get install -y"
-    DEPS="python3 git python3-gi python3-gi-cairo gir1.2-gtk-4.0 gir1.2-adw-1 python3-requests python3-packaging"
+    DEPS="python3 git python3-gi python3-gi-cairo gir1.2-gtk-4.0 gir1.2-adw-1 gir1.2-gdkpixbuf-2.0 python3-requests python3-packaging"
 elif command -v dnf &>/dev/null; then
     PKG_MANAGER="dnf"
     PKG_INSTALL="sudo dnf install -y"
@@ -38,36 +38,36 @@ elif command -v pacman &>/dev/null; then
     PKG_INSTALL="sudo pacman -S --noconfirm"
     DEPS="python git python-gobject gtk4 libadwaita python-requests python-packaging"
 else
-    error "No se encontró un gestor de paquetes compatible (apt, dnf, pacman)."
+    error "No compatible package manager found (apt, dnf, pacman)."
 fi
 
-success "Gestor de paquetes detectado: $PKG_MANAGER"
+success "Package manager detected: $PKG_MANAGER"
 
-# ── 2. Instalar dependencias ─────────────────────────────────────────────────
-info "Instalando dependencias: $DEPS"
-$PKG_INSTALL $DEPS || error "Falló la instalación de dependencias."
-success "Dependencias instaladas correctamente."
+# ── 2. Install dependencies ──────────────────────────────────────────────────
+info "Installing dependencies: $DEPS"
+$PKG_INSTALL $DEPS || error "Failed to install dependencies."
+success "Dependencies installed."
 
-# ── 3. Clonar o actualizar el repositorio ────────────────────────────────────
+# ── 3. Clone or update repository ───────────────────────────────────────────
 if [ -d "$INSTALL_DIR/.git" ]; then
-    info "El repositorio ya existe en $INSTALL_DIR, actualizando..."
-    git -C "$INSTALL_DIR" pull origin master || error "Falló al actualizar el repositorio."
-    success "Repositorio actualizado."
+    info "Repository already exists at $INSTALL_DIR, updating..."
+    git -C "$INSTALL_DIR" pull origin master || error "Failed to update repository."
+    success "Repository updated."
 else
-    info "Clonando repositorio en $INSTALL_DIR..."
-    git clone "$REPO_URL" "$INSTALL_DIR" || error "Falló al clonar el repositorio."
-    success "Repositorio clonado correctamente."
+    info "Cloning repository to $INSTALL_DIR..."
+    git clone "$REPO_URL" "$INSTALL_DIR" || error "Failed to clone repository."
+    success "Repository cloned."
 fi
 
-# ── 4. Crear archivo .desktop ────────────────────────────────────────────────
-info "Creando acceso directo en el menú de aplicaciones..."
+# ── 4. Create .desktop file ──────────────────────────────────────────────────
+info "Creating application shortcut..."
 
 mkdir -p "$HOME/.local/share/applications"
 
 cat > "$DESKTOP_FILE" <<EOF
 [Desktop Entry]
 Name=HD2 Mod Manager
-Comment=Gestor de mods para Helldivers 2
+Comment=Mod manager for Helldivers 2
 Exec=python3 $INSTALL_DIR/main.py
 Icon=$INSTALL_DIR/assets/icon.png
 Terminal=false
@@ -76,13 +76,13 @@ Categories=Game;Utility;
 StartupNotify=true
 EOF
 
-success "Archivo .desktop creado en $DESKTOP_FILE"
+success "Shortcut created at $DESKTOP_FILE"
 
-# ── 5. Hacer main.py ejecutable ───────────────────────────────────────────────
+# ── 5. Make main.py executable ───────────────────────────────────────────────
 chmod +x "$INSTALL_DIR/main.py"
 
-# ── 6. Refrescar menú de aplicaciones según el escritorio ────────────────────
-info "Actualizando menú de aplicaciones..."
+# ── 6. Refresh application menu ─────────────────────────────────────────────
+info "Refreshing application menu..."
 
 case "$XDG_CURRENT_DESKTOP" in
     KDE)
@@ -93,14 +93,14 @@ case "$XDG_CURRENT_DESKTOP" in
         ;;
 esac
 
-success "Menú actualizado."
+success "Application menu updated."
 
-# ── 7. Listo ─────────────────────────────────────────────────────────────────
+# ── 7. Done ──────────────────────────────────────────────────────────────────
 echo ""
-echo -e "${GREEN}  Instalación completada.${NC}"
+echo -e "${GREEN}  Installation complete.${NC}"
 echo ""
-echo "  Puedes abrir la app desde el menú de aplicaciones"
-echo "  buscando 'HD2 Mod Manager', o ejecutando:"
+echo "  Launch HD2 Mod Manager from your application menu,"
+echo "  or run:"
 echo ""
 echo -e "    ${BLUE}python3 $INSTALL_DIR/main.py${NC}"
 echo ""
