@@ -1,0 +1,354 @@
+# HD2 Mod Manager — English translation
+# Generated: 2026-05-12 22:15
+#
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"MIME-Version: 1.0\n"
+"Language: en\n"
+"Project-Id-Version: hd2-mod-manager\n"
+
+#: ui.py:38
+msgid "Verify integrity"
+msgstr ""
+
+#: ui.py:46
+msgid "Update mod"
+msgstr ""
+
+#: ui.py:54
+msgid "Uninstall mod"
+msgstr ""
+
+#: ui.py:82
+msgid "Installed mods"
+msgstr ""
+
+#: ui.py:83
+msgid "Enable, disable or uninstall your Helldivers 2 mods"
+msgstr ""
+
+#: ui.py:148
+msgid "Close"
+msgstr ""
+
+#: ui.py:159
+msgid "Cancel"
+msgstr ""
+
+#: ui.py:160
+msgid "Uninstall"
+msgstr ""
+
+#: ui.py:177
+msgid "ZIP Files"
+msgstr ""
+
+#: ui.py:267
+msgid "View on Nexus Mods"
+msgstr ""
+
+#: ui.py:274
+msgid "Install mod"
+msgstr ""
+
+#: ui.py:315
+msgid "Search all mods…"
+msgstr ""
+
+#: ui.py:331
+msgid "Refresh list"
+msgstr ""
+
+#: ui.py:356
+msgid "API Key required"
+msgstr ""
+
+#: ui.py:358
+msgid "To browse mods you need a Nexus Mods API key.\n"
+"\n"
+"1. Go to nexusmods.com → Preferences → API Access\n"
+"2. Copy your Personal API Key\n"
+"3. Create the file ~/hd2-mod-manager/key.json:\n"
+"   { \"api_key\": \"YOUR_KEY_HERE\" }\n"
+"4. Restart the app"
+msgstr ""
+
+#: ui.py:376
+msgid "No results"
+msgstr ""
+
+#: ui.py:378
+msgid "No mod matches your search.\n"
+"Try a different term or refresh the list."
+msgstr ""
+
+#: ui.py:385
+msgid "Connection error"
+msgstr ""
+
+#: ui.py:573
+msgid "You can customize the mod name:"
+msgstr ""
+
+#: ui.py:582
+msgid "Install"
+msgstr ""
+
+#: ui.py:601
+msgid "HD2 Mod Manager"
+msgstr ""
+
+#: ui.py:618
+msgid "Settings"
+msgstr ""
+
+#: ui.py:628
+msgid "My Mods"
+msgstr ""
+
+#: ui.py:633
+msgid "Explore"
+msgstr ""
+
+#: ui.py:652
+msgid "Select mod ZIP file"
+msgstr ""
+
+#: ui.py:733
+msgid "Later"
+msgstr ""
+
+#: ui.py:734
+msgid "Update now"
+msgstr ""
+
+#: ui.py:743
+msgid "Updating… please wait."
+msgstr ""
+
+#: ui.py:755
+msgid "Restart"
+msgstr ""
+
+#: ui.py:781
+msgid "General"
+msgstr ""
+
+#: ui.py:786
+msgid "Game path"
+msgstr ""
+
+#: ui.py:787
+msgid "Indicates the root folder where Helldivers 2 is installed"
+msgstr ""
+
+#: ui.py:791
+msgid "Installation folder"
+msgstr ""
+
+#: ui.py:804
+msgid "Status"
+msgstr ""
+
+#: ui.py:821
+msgid "Select Helldivers 2 folder"
+msgstr ""
+
+#: ui.py:87
+msgid "No mods installed.\n"
+"Use 'Install mod' or browse the catalog in the Explore tab."
+msgstr ""
+
+#: ui.py:137
+msgid "No registered files found for this mod."
+msgstr ""
+
+#: ui.py:142
+msgid "All files are present."
+msgstr ""
+
+#: ui.py:321
+msgid "Trending first"
+msgstr ""
+
+#: ui.py:322
+msgid "Most recent"
+msgstr ""
+
+#: ui.py:323
+msgid "Most downloaded"
+msgstr ""
+
+#: ui.py:324
+msgid "A–Z"
+msgstr ""
+
+#: ui.py:347
+msgid "Loading mods from Nexus Mods…"
+msgstr ""
+
+#: ui.py:365
+msgid "Open nexusmods.com"
+msgstr ""
+
+#: ui.py:386
+msgid "Retry"
+msgstr ""
+
+#: ui.py:418
+msgid "Search is over loaded mods (trending + recent + updated). Visit nexusmods.com to see the full catalog."
+msgstr ""
+
+#: ui.py:572
+msgid "Mod name"
+msgstr ""
+
+#: ui.py:716
+msgid "Configure now"
+msgstr ""
+
+#: ui.py:726
+msgid "Update available"
+msgstr ""
+
+#: ui.py:752
+msgid "Update completed"
+msgstr ""
+
+#: ui.py:753
+msgid "The app updated successfully. It will restart now."
+msgstr ""
+
+#: ui.py:763
+msgid "Error updating"
+msgstr ""
+
+#: ui.py:796
+msgid "Change"
+msgstr ""
+
+#: ui.py:811
+msgid "Valid path — 'data' folder found"
+msgstr ""
+
+#: ui.py:815
+msgid "Invalid path — 'data' folder not found"
+msgstr ""
+
+#: ui.py:26
+msgid "Installed: {date}  |  Files: {n}"
+msgstr ""
+
+#: ui.py:175
+msgid "Select new version of '{name}'"
+msgstr ""
+
+#: ui.py:552
+msgid "Select downloaded ZIP for '{name}'"
+msgstr ""
+
+#: ui.py:712
+msgid "Welcome to HD2 Mod Manager"
+msgstr ""
+
+#: ui.py:713
+msgid "Game path not found.\n"
+"Configure the game installation path to continue."
+msgstr ""
+
+#: ui.py:134
+msgid "Integrity: {name}"
+msgstr ""
+
+#: ui.py:144
+msgid "{n} missing file(s)."
+msgstr ""
+
+#: ui.py:155
+msgid "Are you sure you want to uninstall '{name}'? Original game files will be restored."
+msgstr ""
+
+#: ui.py:502
+msgid "{n} result(s) of {total} loaded mods"
+msgstr ""
+
+#: ui.py:506
+msgid "{total} mods loaded from Nexus Mods"
+msgstr ""
+
+#: ui.py:727
+msgid "A new version of HD2 Mod Manager is available.\n"
+"\n"
+"Current version: {current}\n"
+"New version: {latest}\n"
+"\n"
+"Do you want to update now?"
+msgstr ""
+
+#: ui.py:764
+msgid "Could not update the app:\n"
+"\n"
+"{msg}"
+msgstr ""
+
+#: mod_manager.py:43
+msgid "The path does not exist."
+msgstr ""
+
+#: mod_manager.py:47
+msgid "The 'data' folder was not found inside the specified path. Make sure it is the game's root folder."
+msgstr ""
+
+#: mod_manager.py:82
+msgid "The file does not exist."
+msgstr ""
+
+#: mod_manager.py:87
+msgid "The file is not a valid ZIP."
+msgstr ""
+
+#: mod_manager.py:95
+msgid "Game folder not found. Check the path in Settings."
+msgstr ""
+
+#: mod_manager.py:296
+msgid "The mod is already on the latest version."
+msgstr ""
+
+#: mod_manager.py:154
+msgid "Mod '{name}' installed successfully ({n} files)."
+msgstr ""
+
+#: mod_manager.py:193
+msgid "Mod '{name}' uninstalled and original files restored."
+msgstr ""
+
+#: mod_manager.py:54
+msgid "Path saved: {path}"
+msgstr ""
+
+#: mod_manager.py:103
+msgid "Mod '{name}' is already installed."
+msgstr ""
+
+#: mod_manager.py:165
+msgid "Mod '{name}' is not in the index."
+msgstr ""
+
+#: mod_manager.py:225
+msgid "Mod '{name}' disabled."
+msgstr ""
+
+#: mod_manager.py:238
+msgid "Mod '{name}' enabled."
+msgstr ""
+
+#: mod_manager.py:288
+msgid "Mod '{name}' is not installed."
+msgstr ""
+
+#: mod_manager.py:140
+msgid "Error installing: {error}"
+msgstr ""

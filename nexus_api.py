@@ -182,26 +182,57 @@ def download_thumbnail(url: str) -> bytes | None:
         return None
 
 
-def fetch_mods_async(mode: str, on_success, on_error):
+def get_latest_added_mods() -> list[dict]:
     """
-    Obtiene mods en un hilo separado.
-    mode: "trending" | "updated"
-    on_success(mods): llamado en hilo secundario — usar GLib.idle_add en la UI
-    on_error(msg): llamado en hilo secundario — usar GLib.idle_add en la UI
+    Retorna los 10 mods más recientes de Helldivers 2.
+    Usa caché de sesión (5 minutos).
+    """
+    cached = _cache_get("latest_added")
+    if cached is not None:
+        return cached
+
+    data = _get(f"/games/{_GAME_DOMAIN}/mods/latest_added.json")
+    mods = _normalize_mods(data)
+    _cache_set("latest_added", mods)
+    logger.info(f"nexus_api: {len(mods)} mods recientes obtenidos")
+    return mods
+
+
+def fetch_pool_async(on_success, on_error):
+    """
+    Carga en paralelo trending + updated + latest_added y los combina
+    en un único pool deduplicado (por mod_id).
+    on_success(pool): lista de dicts, llamado desde hilo secundario — usar GLib.idle_add
+    on_error(err):   tupla (kind, msg), llamado desde hilo secundario
     """
     def _run():
         try:
-            if mode == "trending":
-                mods = get_trending_mods()
-            else:
-                mods = get_updated_mods()
-            on_success(mods)
+            pool: dict[int, dict] = {}
+
+            # Cargar las tres fuentes; updated es la más lenta (muchos requests)
+            for getter in (get_trending_mods, get_latest_added_mods, get_updated_mods):
+                try:
+                    for mod in getter():
+                        mid = mod["mod_id"]
+                        if mid not in pool:
+                            pool[mid] = mod
+                except NexusApiError as e:
+                    logger.error(f"nexus_api: error parcial en pool: {e}")
+                    # No abortar: continuar con las otras fuentes
+
+            if not pool:
+                raise NexusApiError("No se pudieron obtener mods de ninguna fuente.")
+
+            result = list(pool.values())
+            logger.info(f"nexus_api: pool combinado = {len(result)} mods únicos")
+            on_success(result)
         except KeyNotConfiguredError as e:
             on_error(("key_missing", str(e)))
         except NexusApiError as e:
             on_error(("api_error", str(e)))
 
     threading.Thread(target=_run, daemon=True).start()
+
 
 
 # ── Helpers internos ──────────────────────────────────────────────────────────

@@ -2,13 +2,15 @@ import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 gi.require_version("GdkPixbuf", "2.0")
-from gi.repository import Gtk, Adw, Gio, GLib, GdkPixbuf
+from gi.repository import Gtk, Adw, Gio, GLib, GdkPixbuf, Pango
 import mod_manager as mm
 import logger
 import updater
 import nexus_api
 from nexus_api import KeyNotConfiguredError, NexusApiError
 from app_meta import get_version
+from i18n import _
+import i18n
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -22,7 +24,9 @@ class ModRow(Adw.ActionRow):
         self.set_title(mod_info["name"])
         installed_at = mod_info.get("installed_at", "")[:10]
         files_count = len(mod_info.get("files", []))
-        self.set_subtitle(f"Instalado: {installed_at}  |  Archivos: {files_count}")
+        self.set_subtitle(_("Installed: {date}  |  Files: {n}").format(
+            date=installed_at, n=files_count
+        ))
 
         self.switch = Gtk.Switch()
         self.switch.set_active(mod_info.get("enabled", True))
@@ -32,7 +36,7 @@ class ModRow(Adw.ActionRow):
 
         verify_btn = Gtk.Button()
         verify_btn.set_icon_name("emblem-ok-symbolic")
-        verify_btn.set_tooltip_text("Verificar integridad")
+        verify_btn.set_tooltip_text(_("Verify integrity"))
         verify_btn.set_valign(Gtk.Align.CENTER)
         verify_btn.add_css_class("flat")
         verify_btn.connect("clicked", lambda _: on_verify(mod_info["name"]))
@@ -40,7 +44,7 @@ class ModRow(Adw.ActionRow):
 
         update_btn = Gtk.Button()
         update_btn.set_icon_name("software-update-available-symbolic")
-        update_btn.set_tooltip_text("Actualizar mod")
+        update_btn.set_tooltip_text(_("Update mod"))
         update_btn.set_valign(Gtk.Align.CENTER)
         update_btn.add_css_class("flat")
         update_btn.connect("clicked", lambda _: on_update(mod_info["name"]))
@@ -48,7 +52,7 @@ class ModRow(Adw.ActionRow):
 
         del_btn = Gtk.Button()
         del_btn.set_icon_name("user-trash-symbolic")
-        del_btn.set_tooltip_text("Desinstalar mod")
+        del_btn.set_tooltip_text(_("Uninstall mod"))
         del_btn.set_valign(Gtk.Align.CENTER)
         del_btn.add_css_class("flat")
         del_btn.add_css_class("destructive-action")
@@ -76,12 +80,12 @@ class MyModsPage(Gtk.Box):
         self.main_box.append(self.banner)
 
         self.mods_group = Adw.PreferencesGroup()
-        self.mods_group.set_title("Mods instalados")
-        self.mods_group.set_description("Activa, desactiva o desinstala tus mods de Helldivers 2")
+        self.mods_group.set_title(_("Installed mods"))
+        self.mods_group.set_description(_("Enable, disable or uninstall your Helldivers 2 mods"))
         self.main_box.append(self.mods_group)
 
         self.empty_label = Gtk.Label(
-            label="No hay mods instalados.\nUsa 'Instalar mod' o explora el catálogo en la pestaña Explorar."
+            label=_("No mods installed.\nUse 'Install mod' or browse the catalog in the Explore tab.")
         )
         self.empty_label.set_justify(Gtk.Justification.CENTER)
         self.empty_label.add_css_class("dim-label")
@@ -115,7 +119,7 @@ class MyModsPage(Gtk.Box):
             self.mod_rows[mod["name"]] = row
 
     def on_toggle(self, mod_name: str, switch, state):
-        logger.info(f"Usuario cambió estado del mod: {mod_name} -> {'activado' if state else 'desactivado'}")
+        logger.info(f"User changed mod state: {mod_name} -> {'enabled' if state else 'disabled'}")
         ok, msg = mm.toggle_mod(mod_name)
         self.show_toast(msg, ok)
         if not ok:
@@ -123,29 +127,38 @@ class MyModsPage(Gtk.Box):
         return False
 
     def on_verify(self, mod_name: str):
-        logger.info(f"Usuario verificó integridad del mod: {mod_name}")
+        logger.info(f"User verified mod integrity: {mod_name}")
         all_ok, results = mm.verify_mod(mod_name)
 
-        dialog = Adw.MessageDialog(transient_for=self.window, heading=f"Integridad: {mod_name}")
+        dialog = Adw.MessageDialog(
+            transient_for=self.window,
+            heading=_("Integrity: {name}").format(name=mod_name),
+        )
         if not results:
-            dialog.set_body("No se encontraron archivos registrados para este mod.")
+            dialog.set_body(_("No registered files found for this mod."))
         else:
             lines = [("✓" if r["ok"] else "✗") + f"  {r['file']}" for r in results]
-            summary = "Todos los archivos están presentes." if all_ok else \
-                      f"{sum(1 for r in results if not r['ok'])} archivo(s) faltante(s)."
+            missing = sum(1 for r in results if not r["ok"])
+            summary = (
+                _("All files are present.")
+                if all_ok
+                else _("{n} missing file(s).").format(n=missing)
+            )
             dialog.set_body(f"{summary}\n\n" + "\n".join(lines))
 
-        dialog.add_response("close", "Cerrar")
+        dialog.add_response("close", _("Close"))
         dialog.present()
 
     def on_uninstall(self, mod_name: str):
         dialog = Adw.MessageDialog(
             transient_for=self.window,
-            heading="Desinstalar mod",
-            body=f"¿Deseas desinstalar '{mod_name}'? Los archivos originales del juego serán restaurados.",
+            heading=_("Uninstall mod"),
+            body=_("Are you sure you want to uninstall '{name}'? Original game files will be restored.").format(
+                name=mod_name
+            ),
         )
-        dialog.add_response("cancel", "Cancelar")
-        dialog.add_response("uninstall", "Desinstalar")
+        dialog.add_response("cancel", _("Cancel"))
+        dialog.add_response("uninstall", _("Uninstall"))
         dialog.set_response_appearance("uninstall", Adw.ResponseAppearance.DESTRUCTIVE)
         dialog.connect("response", lambda d, r: self._do_uninstall(mod_name, r))
         dialog.present()
@@ -160,9 +173,9 @@ class MyModsPage(Gtk.Box):
 
     def on_update(self, mod_name: str):
         dialog = Gtk.FileDialog()
-        dialog.set_title(f"Seleccionar nueva versión de '{mod_name}'")
+        dialog.set_title(_("Select new version of '{name}'").format(name=mod_name))
         filter_zip = Gtk.FileFilter()
-        filter_zip.set_name("Archivos ZIP")
+        filter_zip.set_name(_("ZIP Files"))
         filter_zip.add_pattern("*.zip")
         filters = Gio.ListStore.new(Gtk.FileFilter)
         filters.append(filter_zip)
@@ -178,7 +191,7 @@ class MyModsPage(Gtk.Box):
             if ok:
                 self.refresh_mods()
         except Exception as e:
-            logger.error(f"Error al actualizar mod: {mod_name}", exc=e)
+            logger.error(f"Error updating mod: {mod_name}", exc=e)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -187,16 +200,15 @@ class MyModsPage(Gtk.Box):
 
 class NexusModRow(Gtk.ListBoxRow):
     """
-    Fila de un mod del catálogo de Nexus Mods.
-    Usa Gtk.ListBoxRow en lugar de Adw.ActionRow para poder incluir
-    una descripción multilínea sin romper el layout interno de ActionRow.
+    Row for a mod from the Nexus Mods catalog.
+    Uses Gtk.ListBoxRow instead of Adw.ActionRow to support
+    multiline description without breaking ActionRow's internal layout.
     """
 
     def __init__(self, mod: dict, on_install, on_open):
         super().__init__()
         self.mod = mod
 
-        # Contenedor raíz de la fila
         outer = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
         outer.set_margin_top(10)
         outer.set_margin_bottom(10)
@@ -204,16 +216,15 @@ class NexusModRow(Gtk.ListBoxRow):
         outer.set_margin_end(8)
         self.set_child(outer)
 
-        # ── Miniatura ────────────────────────────────────────────────────────
-        self._thumb = Gtk.Image()
+        # ── Thumbnail ────────────────────────────────────────────────────────
+        self._thumb = Gtk.Image.new_from_icon_name("image-loading-symbolic")
         self._thumb.set_size_request(72, 72)
         self._thumb.set_valign(Gtk.Align.START)
-        self._thumb.set_icon_name("image-loading-symbolic")
-        self._thumb.set_icon_size(Gtk.IconSize.LARGE)
+        self._thumb.set_pixel_size(48)
         self._thumb.add_css_class("rounded")
         outer.append(self._thumb)
 
-        # ── Contenido central (título + subtítulo + descripción) ─────────────
+        # ── Content (title + subtitle + description) ─────────────────────────
         content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
         content.set_hexpand(True)
         content.set_valign(Gtk.Align.CENTER)
@@ -222,7 +233,7 @@ class NexusModRow(Gtk.ListBoxRow):
         title_lbl = Gtk.Label(label=mod["name"])
         title_lbl.set_xalign(0)
         title_lbl.set_wrap(True)
-        title_lbl.set_wrap_mode(gi.repository.Pango.WrapMode.WORD_CHAR)
+        title_lbl.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
         title_lbl.add_css_class("heading")
         content.append(title_lbl)
 
@@ -242,39 +253,38 @@ class NexusModRow(Gtk.ListBoxRow):
             desc_lbl = Gtk.Label(label=summary)
             desc_lbl.set_xalign(0)
             desc_lbl.set_wrap(True)
-            desc_lbl.set_wrap_mode(gi.repository.Pango.WrapMode.WORD_CHAR)
+            desc_lbl.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
             desc_lbl.add_css_class("caption")
             desc_lbl.set_margin_top(4)
             content.append(desc_lbl)
 
-        # ── Botones ──────────────────────────────────────────────────────────
+        # ── Buttons ──────────────────────────────────────────────────────────
         btn_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         btn_box.set_valign(Gtk.Align.CENTER)
         outer.append(btn_box)
 
         open_btn = Gtk.Button()
         open_btn.set_icon_name("web-browser-symbolic")
-        open_btn.set_tooltip_text("Ver en Nexus Mods")
+        open_btn.set_tooltip_text(_("View on Nexus Mods"))
         open_btn.add_css_class("flat")
         open_btn.connect("clicked", lambda _: on_open(mod["mod_id"]))
         btn_box.append(open_btn)
 
         install_btn = Gtk.Button()
         install_btn.set_icon_name("list-add-symbolic")
-        install_btn.set_tooltip_text("Instalar mod")
+        install_btn.set_tooltip_text(_("Install mod"))
         install_btn.add_css_class("flat")
         install_btn.add_css_class("suggested-action")
         install_btn.connect("clicked", lambda _: on_install(mod))
         btn_box.append(install_btn)
 
     def set_thumbnail_bytes(self, data: bytes):
-        """Carga la miniatura desde bytes. Llamado desde el hilo principal via GLib.idle_add."""
+        """Load thumbnail from bytes. Called from main thread via GLib.idle_add."""
         try:
             loader = GdkPixbuf.PixbufLoader()
             loader.write(data)
             loader.close()
             pixbuf = loader.get_pixbuf()
-            # Recortar al centro y escalar a 72x72
             w, h = pixbuf.get_width(), pixbuf.get_height()
             side = min(w, h)
             x = (w - side) // 2
@@ -283,17 +293,18 @@ class NexusModRow(Gtk.ListBoxRow):
             scaled = cropped.scale_simple(72, 72, GdkPixbuf.InterpType.BILINEAR)
             self._thumb.set_from_pixbuf(scaled)
         except Exception as e:
-            logger.error(f"Error cargando miniatura: {e}")
+            logger.error(f"Error loading thumbnail: {e}")
 
 
 class ExplorePage(Gtk.Box):
     def __init__(self, window):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         self.window = window
-        self._current_mods: list[dict] = []
+        self._pool: list[dict] = []
+        self._visible_mods: list[dict] = []
         self._mod_rows: dict[int, NexusModRow] = {}
 
-        # ── Barra de herramientas ────────────────────────────────────────────
+        # ── Toolbar ──────────────────────────────────────────────────────────
         toolbar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         toolbar.set_margin_top(8)
         toolbar.set_margin_bottom(8)
@@ -302,54 +313,57 @@ class ExplorePage(Gtk.Box):
         self.append(toolbar)
 
         self._search = Gtk.SearchEntry()
-        self._search.set_placeholder_text("Buscar mods…")
+        self._search.set_placeholder_text(_("Search all mods…"))
         self._search.set_hexpand(True)
         self._search.connect("search-changed", self._on_search_changed)
         toolbar.append(self._search)
 
-        # Selector de modo: Trending / Actualizados
-        self._mode_btn = Gtk.DropDown.new_from_strings(["Trending", "Actualizados"])
-        self._mode_btn.connect("notify::selected", self._on_mode_changed)
-        toolbar.append(self._mode_btn)
+        self._sort_btn = Gtk.DropDown.new_from_strings([
+            _("Trending first"),
+            _("Most recent"),
+            _("Most downloaded"),
+            _("A–Z"),
+        ])
+        self._sort_btn.connect("notify::selected", self._on_sort_changed)
+        toolbar.append(self._sort_btn)
 
-        # Botón refrescar
         refresh_btn = Gtk.Button()
         refresh_btn.set_icon_name("view-refresh-symbolic")
-        refresh_btn.set_tooltip_text("Refrescar lista")
+        refresh_btn.set_tooltip_text(_("Refresh list"))
         refresh_btn.connect("clicked", self._on_refresh)
         toolbar.append(refresh_btn)
 
-        # ── ViewStack: loading / error / lista ───────────────────────────────
+        # ── Stack ─────────────────────────────────────────────────────────────
         self._stack = Gtk.Stack()
         self._stack.set_vexpand(True)
         self.append(self._stack)
 
-        # Estado: cargando
+        # Loading state
         loading_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
         loading_box.set_valign(Gtk.Align.CENTER)
         loading_box.set_halign(Gtk.Align.CENTER)
         spinner = Gtk.Spinner()
         spinner.set_size_request(48, 48)
         spinner.start()
-        loading_label = Gtk.Label(label="Cargando mods desde Nexus Mods…")
+        loading_label = Gtk.Label(label=_("Loading mods from Nexus Mods…"))
         loading_label.add_css_class("dim-label")
         loading_box.append(spinner)
         loading_box.append(loading_label)
         self._stack.add_named(loading_box, "loading")
 
-        # Estado: sin API key
+        # No API key state
         self._key_status_page = Adw.StatusPage()
         self._key_status_page.set_icon_name("dialog-password-symbolic")
-        self._key_status_page.set_title("API Key requerida")
+        self._key_status_page.set_title(_("API Key required"))
         self._key_status_page.set_description(
-            "Para explorar mods necesitas una API key de Nexus Mods.\n\n"
-            "1. Ve a nexusmods.com → Preferencias → API Access\n"
-            "2. Copia tu Personal API Key\n"
-            "3. Crea el archivo ~/hd2-mod-manager/key.json:\n"
-            '   { "api_key": "TU_KEY_AQUI" }\n'
-            "4. Reinicia la app"
+            _("To browse mods you need a Nexus Mods API key.\n\n"
+              "1. Go to nexusmods.com → Preferences → API Access\n"
+              "2. Copy your Personal API Key\n"
+              "3. Create the file ~/hd2-mod-manager/key.json:\n"
+              "   { \"api_key\": \"YOUR_KEY_HERE\" }\n"
+              "4. Restart the app")
         )
-        open_nexus_btn = Gtk.Button(label="Abrir nexusmods.com")
+        open_nexus_btn = Gtk.Button(label=_("Open nexusmods.com"))
         open_nexus_btn.set_halign(Gtk.Align.CENTER)
         open_nexus_btn.add_css_class("suggested-action")
         open_nexus_btn.add_css_class("pill")
@@ -357,18 +371,27 @@ class ExplorePage(Gtk.Box):
         self._key_status_page.set_child(open_nexus_btn)
         self._stack.add_named(self._key_status_page, "no_key")
 
-        # Estado: error de red
+        # No results state
+        self._empty_status_page = Adw.StatusPage()
+        self._empty_status_page.set_icon_name("system-search-symbolic")
+        self._empty_status_page.set_title(_("No results"))
+        self._empty_status_page.set_description(
+            _("No mod matches your search.\nTry a different term or refresh the list.")
+        )
+        self._stack.add_named(self._empty_status_page, "empty")
+
+        # Connection error state
         self._error_status_page = Adw.StatusPage()
         self._error_status_page.set_icon_name("network-error-symbolic")
-        self._error_status_page.set_title("Error de conexión")
-        retry_btn = Gtk.Button(label="Reintentar")
+        self._error_status_page.set_title(_("Connection error"))
+        retry_btn = Gtk.Button(label=_("Retry"))
         retry_btn.set_halign(Gtk.Align.CENTER)
         retry_btn.add_css_class("pill")
         retry_btn.connect("clicked", self._on_refresh)
         self._error_status_page.set_child(retry_btn)
         self._stack.add_named(self._error_status_page, "error")
 
-        # Estado: lista de mods con scroll infinito
+        # Mod list state
         scroll = Gtk.ScrolledWindow()
         scroll.set_vexpand(True)
         self._stack.add_named(scroll, "list")
@@ -380,18 +403,11 @@ class ExplorePage(Gtk.Box):
         list_box.set_margin_end(12)
         scroll.set_child(list_box)
 
-        # Título del grupo
-        group_title = Gtk.Label(label="Mods de Helldivers 2")
-        group_title.set_xalign(0)
-        group_title.add_css_class("heading")
-        group_title.set_margin_bottom(4)
-        list_box.append(group_title)
-
         self._group_description = Gtk.Label(label="")
         self._group_description.set_xalign(0)
         self._group_description.add_css_class("dim-label")
         self._group_description.add_css_class("caption")
-        self._group_description.set_margin_bottom(8)
+        self._group_description.set_margin_bottom(4)
         list_box.append(self._group_description)
 
         self._mods_group = Gtk.ListBox()
@@ -399,37 +415,31 @@ class ExplorePage(Gtk.Box):
         self._mods_group.add_css_class("boxed-list")
         list_box.append(self._mods_group)
 
-        # Pie de lista — aviso API personal
         notice = Gtk.Label(
-            label="ℹ Usando API key personal en modo testing. "
-                  "Los mods se descargan manualmente desde Nexus Mods."
+            label=_("Search is over loaded mods (trending + recent + updated). "
+                    "Visit nexusmods.com to see the full catalog.")
         )
         notice.set_wrap(True)
         notice.set_xalign(0.5)
         notice.add_css_class("dim-label")
+        notice.add_css_class("caption")
         notice.set_margin_top(8)
         list_box.append(notice)
 
-        # Cargar al inicio
-        self._load_mods()
+        self._load_pool()
 
-    # ── Carga de mods ────────────────────────────────────────────────────────
+    # ── Pool loading ─────────────────────────────────────────────────────────
 
-    def _load_mods(self):
+    def _load_pool(self):
         self._stack.set_visible_child_name("loading")
-        mode = "trending" if self._mode_btn.get_selected() == 0 else "updated"
-
-        nexus_api.fetch_mods_async(
-            mode,
-            on_success=lambda mods: GLib.idle_add(self._on_mods_loaded, mods),
+        nexus_api.fetch_pool_async(
+            on_success=lambda mods: GLib.idle_add(self._on_pool_loaded, mods),
             on_error=lambda err: GLib.idle_add(self._on_mods_error, err),
         )
 
-    def _on_mods_loaded(self, mods: list[dict]):
-        self._current_mods = mods
-        self._render_mods(mods)
-        self._stack.set_visible_child_name("list")
-        self._load_thumbnails(mods)
+    def _on_pool_loaded(self, pool: list[dict]):
+        self._pool = pool
+        self._apply_filter_and_sort()
         return False
 
     def _on_mods_error(self, err: tuple):
@@ -441,8 +451,41 @@ class ExplorePage(Gtk.Box):
             self._stack.set_visible_child_name("error")
         return False
 
+    # ── Filter + sort ────────────────────────────────────────────────────────
+
+    def _apply_filter_and_sort(self):
+        query = self._search.get_text().lower().strip()
+
+        if query:
+            mods = [
+                m for m in self._pool
+                if query in m["name"].lower()
+                or query in (m.get("summary") or "").lower()
+                or query in m["author"].lower()
+            ]
+        else:
+            mods = list(self._pool)
+
+        sort_idx = self._sort_btn.get_selected()
+        if sort_idx == 0:
+            pass  # Trending first — keep pool insertion order
+        elif sort_idx == 1:
+            mods.sort(key=lambda m: m.get("updated_time", ""), reverse=True)
+        elif sort_idx == 2:
+            mods.sort(key=lambda m: m.get("mod_unique_downloads", 0), reverse=True)
+        elif sort_idx == 3:
+            mods.sort(key=lambda m: m["name"].lower())
+
+        self._visible_mods = mods
+
+        if not mods and query:
+            self._stack.set_visible_child_name("empty")
+        else:
+            self._render_mods(mods)
+            self._stack.set_visible_child_name("list")
+            self._load_thumbnails(mods)
+
     def _render_mods(self, mods: list[dict]):
-        # Limpiar filas actuales
         for row in self._mod_rows.values():
             self._mods_group.remove(row)
         self._mod_rows.clear()
@@ -452,11 +495,19 @@ class ExplorePage(Gtk.Box):
             self._mods_group.append(row)
             self._mod_rows[mod["mod_id"]] = row
 
-        title_mode = "Trending" if self._mode_btn.get_selected() == 0 else "Actualizados esta semana"
-        self._group_description.set_label(f"{title_mode} · {len(mods)} mods")
+        total = len(self._pool)
+        shown = len(mods)
+        query = self._search.get_text().strip()
+        if query:
+            self._group_description.set_label(
+                _("{n} result(s) of {total} loaded mods").format(n=shown, total=total)
+            )
+        else:
+            self._group_description.set_label(
+                _("{total} mods loaded from Nexus Mods").format(total=total)
+            )
 
     def _load_thumbnails(self, mods: list[dict]):
-        """Descarga miniaturas en hilos separados y las aplica via GLib.idle_add."""
         import threading
 
         def _fetch(mod):
@@ -472,66 +523,55 @@ class ExplorePage(Gtk.Box):
         for mod in mods:
             threading.Thread(target=_fetch, args=(mod,), daemon=True).start()
 
-    # ── Eventos ──────────────────────────────────────────────────────────────
+    # ── Events ───────────────────────────────────────────────────────────────
 
     def _on_search_changed(self, entry):
-        query = entry.get_text().lower().strip()
-        if not query:
-            filtered = self._current_mods
-        else:
-            filtered = [
-                m for m in self._current_mods
-                if query in m["name"].lower() or query in m["summary"].lower()
-                or query in m["author"].lower()
-            ]
-        self._render_mods(filtered)
+        if self._pool:
+            self._apply_filter_and_sort()
 
-    def _on_mode_changed(self, dropdown, _param):
-        self._search.set_text("")
-        self._load_mods()
+    def _on_sort_changed(self, dropdown, _param):
+        if self._pool:
+            self._apply_filter_and_sort()
 
     def _on_refresh(self, *_):
-        # Limpiar caché para forzar nueva consulta
         nexus_api._cache.clear()
         self._search.set_text("")
-        self._load_mods()
+        self._pool = []
+        self._load_pool()
 
     def _on_open_mod(self, mod_id: int):
-        logger.info(f"Abriendo página del mod {mod_id} en el navegador")
+        logger.info(f"Opening mod page {mod_id} in browser")
         nexus_api.open_mod_page(mod_id)
 
     def _on_install(self, mod: dict):
-        """Abre el navegador y luego el FileDialog para instalar el mod."""
-        logger.info(f"Usuario inició instalación desde Explorar: {mod['name']} (id={mod['mod_id']})")
-        # 1. Abrir navegador
+        logger.info(f"User started install from Explore: {mod['name']} (id={mod['mod_id']})")
         nexus_api.open_mod_page(mod["mod_id"])
-        # 2. Pequeña pausa para que el navegador abra, luego el FileDialog
         GLib.timeout_add(800, self._open_install_dialog, mod)
 
     def _open_install_dialog(self, mod: dict):
         dialog = Gtk.FileDialog()
-        dialog.set_title(f"Seleccionar ZIP descargado de '{mod['name']}'")
+        dialog.set_title(_("Select downloaded ZIP for '{name}'").format(name=mod["name"]))
         filter_zip = Gtk.FileFilter()
-        filter_zip.set_name("Archivos ZIP")
+        filter_zip.set_name(_("ZIP Files"))
         filter_zip.add_pattern("*.zip")
         filters = Gio.ListStore.new(Gtk.FileFilter)
         filters.append(filter_zip)
         dialog.set_filters(filters)
         dialog.open(self.window, None, lambda d, r: self._on_file_selected(d, r, mod))
-        return False  # no repetir el timeout
+        return False
 
     def _on_file_selected(self, dialog, result, mod: dict):
         try:
             file = dialog.open_finish(result)
             zip_path = file.get_path()
-            logger.debug(f"ZIP seleccionado: {zip_path}")
+            logger.debug(f"ZIP selected: {zip_path}")
             self._show_name_dialog(zip_path, mod["name"])
         except Exception as e:
-            logger.error(f"Error seleccionando archivo: {e}")
+            logger.error(f"Error selecting file: {e}")
 
     def _show_name_dialog(self, zip_path: str, default_name: str):
-        dialog = Adw.MessageDialog(transient_for=self.window, heading="Nombre del mod")
-        dialog.set_body("Puedes personalizar el nombre del mod:")
+        dialog = Adw.MessageDialog(transient_for=self.window, heading=_("Mod name"))
+        dialog.set_body(_("You can customize the mod name:"))
         entry = Gtk.Entry()
         entry.set_text(default_name)
         entry.set_margin_top(8)
@@ -539,8 +579,8 @@ class ExplorePage(Gtk.Box):
         entry.set_margin_start(8)
         entry.set_margin_end(8)
         dialog.set_extra_child(entry)
-        dialog.add_response("cancel", "Cancelar")
-        dialog.add_response("install", "Instalar")
+        dialog.add_response("cancel", _("Cancel"))
+        dialog.add_response("install", _("Install"))
         dialog.set_response_appearance("install", Adw.ResponseAppearance.SUGGESTED)
         dialog.connect("response", lambda d, r: self._do_install(zip_path, entry.get_text(), r))
         dialog.present()
@@ -549,29 +589,26 @@ class ExplorePage(Gtk.Box):
         if response != "install":
             return
         ok, msg = mm.install_mod(zip_path, mod_name.strip() or None)
-        # Notificar a la ventana principal para refrescar la pestaña Mis Mods
         self.window.notify_install(msg, ok)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Ventana principal
+# Main window
 # ══════════════════════════════════════════════════════════════════════════════
 
 class MainWindow(Adw.ApplicationWindow):
     def __init__(self, app):
         super().__init__(application=app)
-        self.set_title("HD2 Mod Manager")
+        self.set_title(_("HD2 Mod Manager"))
         self.set_default_size(750, 600)
 
-        # ── Layout raíz ──────────────────────────────────────────────────────
         root_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         self.set_content(root_box)
 
-        # ── HeaderBar ────────────────────────────────────────────────────────
         self._header = Adw.HeaderBar()
         root_box.append(self._header)
 
-        self._install_btn = Gtk.Button(label="Instalar mod")
+        self._install_btn = Gtk.Button(label=_("Install mod"))
         self._install_btn.set_icon_name("list-add-symbolic")
         self._install_btn.add_css_class("suggested-action")
         self._install_btn.connect("clicked", self._on_install_clicked)
@@ -579,49 +616,43 @@ class MainWindow(Adw.ApplicationWindow):
 
         settings_btn = Gtk.Button()
         settings_btn.set_icon_name("preferences-system-symbolic")
-        settings_btn.set_tooltip_text("Configuración")
+        settings_btn.set_tooltip_text(_("Settings"))
         settings_btn.connect("clicked", self._on_settings_clicked)
         self._header.pack_end(settings_btn)
 
-        # ── ViewStack (contenido) ─────────────────────────────────────────────
         self._view_stack = Adw.ViewStack()
         self._view_stack.set_vexpand(True)
         root_box.append(self._view_stack)
 
         self._my_mods_page = MyModsPage(self)
         self._view_stack.add_titled_with_icon(
-            self._my_mods_page, "my_mods", "Mis Mods", "drive-harddisk-symbolic"
+            self._my_mods_page, "my_mods", _("My Mods"), "drive-harddisk-symbolic"
         )
 
         self._explore_page = ExplorePage(self)
         self._view_stack.add_titled_with_icon(
-            self._explore_page, "explore", "Explorar", "web-browser-symbolic"
+            self._explore_page, "explore", _("Explore"), "web-browser-symbolic"
         )
 
-        # ── ViewSwitcherBar (barra inferior) ──────────────────────────────────
         switcher_bar = Adw.ViewSwitcherBar()
         switcher_bar.set_stack(self._view_stack)
         switcher_bar.set_reveal(True)
         root_box.append(switcher_bar)
 
-        # Ocultar/mostrar botón "Instalar mod" según pestaña activa
         self._view_stack.connect("notify::visible-child", self._on_tab_changed)
 
-        # ── Inicialización ────────────────────────────────────────────────────
         GLib.idle_add(self._check_first_run)
         updater.check_for_app_update(self._on_update_available)
 
-    # ── Cambio de pestaña ─────────────────────────────────────────────────────
     def _on_tab_changed(self, stack, _param):
         visible = stack.get_visible_child_name()
         self._install_btn.set_visible(visible == "my_mods")
 
-    # ── Instalar mod (desde header, pestaña Mis Mods) ─────────────────────────
     def _on_install_clicked(self, _):
         dialog = Gtk.FileDialog()
-        dialog.set_title("Seleccionar archivo ZIP del mod")
+        dialog.set_title(_("Select mod ZIP file"))
         filter_zip = Gtk.FileFilter()
-        filter_zip.set_name("Archivos ZIP")
+        filter_zip.set_name(_("ZIP Files"))
         filter_zip.add_pattern("*.zip")
         filters = Gio.ListStore.new(Gtk.FileFilter)
         filters.append(filter_zip)
@@ -634,14 +665,14 @@ class MainWindow(Adw.ApplicationWindow):
             zip_path = file.get_path()
             self._show_install_name_dialog(zip_path)
         except Exception as e:
-            logger.error("Error al seleccionar archivo ZIP", exc=e)
+            logger.error("Error selecting ZIP file", exc=e)
 
     def _show_install_name_dialog(self, zip_path: str):
         from pathlib import Path
         default_name = Path(zip_path).stem
 
-        dialog = Adw.MessageDialog(transient_for=self, heading="Nombre del mod")
-        dialog.set_body("Puedes personalizar el nombre del mod:")
+        dialog = Adw.MessageDialog(transient_for=self, heading=_("Mod name"))
+        dialog.set_body(_("You can customize the mod name:"))
         entry = Gtk.Entry()
         entry.set_text(default_name)
         entry.set_margin_top(8)
@@ -649,8 +680,8 @@ class MainWindow(Adw.ApplicationWindow):
         entry.set_margin_start(8)
         entry.set_margin_end(8)
         dialog.set_extra_child(entry)
-        dialog.add_response("cancel", "Cancelar")
-        dialog.add_response("install", "Instalar")
+        dialog.add_response("cancel", _("Cancel"))
+        dialog.add_response("install", _("Install"))
         dialog.set_response_appearance("install", Adw.ResponseAppearance.SUGGESTED)
         dialog.connect("response", lambda d, r: self._do_install(zip_path, entry.get_text(), r))
         dialog.present()
@@ -662,16 +693,13 @@ class MainWindow(Adw.ApplicationWindow):
         self.notify_install(msg, ok)
 
     def notify_install(self, msg: str, ok: bool):
-        """Notifica resultado de instalación y refresca la lista de mods."""
         self._my_mods_page.show_toast(msg, ok)
         if ok:
             self._my_mods_page.refresh_mods()
 
-    # ── Configuración ─────────────────────────────────────────────────────────
     def _on_settings_clicked(self, _):
         SettingsWindow(self).present()
 
-    # ── Primera ejecución ─────────────────────────────────────────────────────
     def _check_first_run(self):
         from pathlib import Path
         config = mm.load_config()
@@ -679,31 +707,32 @@ class MainWindow(Adw.ApplicationWindow):
         is_missing = not game_path or not (Path(game_path) / "data").exists()
 
         if is_missing:
-            logger.info("Primera ejecución o ruta no configurada")
+            logger.info("First run or path not configured")
             dialog = Adw.MessageDialog(
                 transient_for=self,
-                heading="Bienvenido a HD2 Mod Manager",
-                body="No se encontró la carpeta de Helldivers 2.\nConfigura la ruta de instalación del juego para continuar.",
+                heading=_("Welcome to HD2 Mod Manager"),
+                body=_("Game path not found.\nConfigure the game installation path to continue."),
             )
-            dialog.add_response("cancel", "Después")
-            dialog.add_response("configure", "Configurar ahora")
+            dialog.add_response("cancel", _("Later"))
+            dialog.add_response("configure", _("Configure now"))
             dialog.set_response_appearance("configure", Adw.ResponseAppearance.SUGGESTED)
             dialog.connect("response", lambda d, r: self._on_settings_clicked(None) if r == "configure" else None)
             dialog.present()
         return False
 
-    # ── Actualizaciones de la app ─────────────────────────────────────────────
     def _on_update_available(self, latest_tag: str):
-        logger.info(f"Mostrando diálogo de actualización: {latest_tag}")
+        logger.info(f"Showing update dialog: {latest_tag}")
         dialog = Adw.MessageDialog(
             transient_for=self,
-            heading="Actualización disponible",
-            body=f"Hay una nueva versión de HD2 Mod Manager.\n\n"
-                 f"Versión actual: {get_version()}\nNueva versión: {latest_tag}\n\n"
-                 f"¿Deseas actualizar ahora?",
+            heading=_("Update available"),
+            body=_("A new version of HD2 Mod Manager is available.\n\n"
+                   "Current version: {current}\nNew version: {latest}\n\n"
+                   "Do you want to update now?").format(
+                current=get_version(), latest=latest_tag
+            ),
         )
-        dialog.add_response("later", "Después")
-        dialog.add_response("update", "Actualizar ahora")
+        dialog.add_response("later", _("Later"))
+        dialog.add_response("update", _("Update now"))
         dialog.set_response_appearance("update", Adw.ResponseAppearance.SUGGESTED)
         dialog.connect("response", self._on_update_response)
         dialog.present()
@@ -712,7 +741,7 @@ class MainWindow(Adw.ApplicationWindow):
     def _on_update_response(self, dialog, response: str):
         if response != "update":
             return
-        self._my_mods_page.show_toast("Actualizando… por favor espera.", success=True)
+        self._my_mods_page.show_toast(_("Updating… please wait."), success=True)
         updater.apply_update(
             on_success=self._on_update_success,
             on_failure=self._on_update_failure,
@@ -721,10 +750,10 @@ class MainWindow(Adw.ApplicationWindow):
     def _on_update_success(self):
         dialog = Adw.MessageDialog(
             transient_for=self,
-            heading="Actualización completada",
-            body="La app se actualizó correctamente. Se reiniciará ahora.",
+            heading=_("Update completed"),
+            body=_("The app updated successfully. It will restart now."),
         )
-        dialog.add_response("restart", "Reiniciar")
+        dialog.add_response("restart", _("Restart"))
         dialog.set_response_appearance("restart", Adw.ResponseAppearance.SUGGESTED)
         dialog.connect("response", lambda d, r: updater.restart())
         dialog.present()
@@ -732,40 +761,41 @@ class MainWindow(Adw.ApplicationWindow):
     def _on_update_failure(self, msg: str):
         dialog = Adw.MessageDialog(
             transient_for=self,
-            heading="Error al actualizar",
-            body=f"No se pudo actualizar la app:\n\n{msg}",
+            heading=_("Error updating"),
+            body=_("Could not update the app:\n\n{msg}").format(msg=msg),
         )
-        dialog.add_response("close", "Cerrar")
+        dialog.add_response("close", _("Close"))
         dialog.present()
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Ventana de configuración
+# Settings window
 # ══════════════════════════════════════════════════════════════════════════════
 
 class SettingsWindow(Adw.PreferencesWindow):
     def __init__(self, parent):
         super().__init__(transient_for=parent, modal=True)
-        self.set_title("Configuración")
+        self._parent_win = parent
+        self.set_title(_("Settings"))
         self.set_default_size(600, 300)
 
         page = Adw.PreferencesPage()
-        page.set_title("General")
+        page.set_title(_("General"))
         page.set_icon_name("preferences-system-symbolic")
         self.add(page)
 
         group = Adw.PreferencesGroup()
-        group.set_title("Ruta del juego")
-        group.set_description("Indica la carpeta raíz donde está instalado Helldivers 2")
+        group.set_title(_("Game path"))
+        group.set_description(_("Indicates the root folder where Helldivers 2 is installed"))
         page.add(group)
 
         self.path_row = Adw.ActionRow()
-        self.path_row.set_title("Carpeta de instalación")
+        self.path_row.set_title(_("Installation folder"))
         config = mm.load_config()
         current_path = config.get("game_path", mm.DEFAULT_GAME_PATH)
         self.path_row.set_subtitle(current_path)
 
-        choose_btn = Gtk.Button(label="Cambiar")
+        choose_btn = Gtk.Button(label=_("Change"))
         choose_btn.set_valign(Gtk.Align.CENTER)
         choose_btn.add_css_class("flat")
         choose_btn.connect("clicked", self._on_choose_folder)
@@ -773,24 +803,77 @@ class SettingsWindow(Adw.PreferencesWindow):
         group.add(self.path_row)
 
         self.status_row = Adw.ActionRow()
-        self.status_row.set_title("Estado")
+        self.status_row.set_title(_("Status"))
         self._update_status(current_path)
         group.add(self.status_row)
+
+        # ── Language group ─────────────────────────────────────────────────────
+        lang_group = Adw.PreferencesGroup()
+        lang_group.set_title(_("Language"))
+        lang_group.set_description(_("Restart the app to apply the new language"))
+        page.add(lang_group)
+
+        lang_codes = [code for _, code in i18n.SUPPORTED_LANGUAGES]
+        lang_names = [name for name, _ in i18n.SUPPORTED_LANGUAGES]
+        current_lang = mm.get_language()
+        current_idx = lang_codes.index(current_lang) if current_lang in lang_codes else 0
+
+        string_list = Gtk.StringList.new(lang_names)
+        self._lang_row = Adw.ComboRow()
+        self._lang_row.set_title(_("Interface language"))
+        self._lang_row.set_model(string_list)
+        self._lang_row.set_selected(current_idx)
+        self._lang_initial_idx = current_idx
+        self._lang_row.connect("notify::selected", self._on_language_changed, lang_codes)
+        lang_group.add(self._lang_row)
+
+    def _on_language_changed(self, row, _param, lang_codes):
+        idx = row.get_selected()
+        # Ignore the signal fired during __init__ when set_selected() is called
+        if idx == self._lang_initial_idx:
+            return
+        lang = lang_codes[idx]
+
+        dialog = Adw.AlertDialog.new(
+            _("Restart required"),
+            _("The app needs to restart to apply the new language. Restart now?"),
+        )
+        dialog.add_response("cancel", _("Cancel"))
+        dialog.add_response("restart", _("Restart"))
+        dialog.set_response_appearance("restart", Adw.ResponseAppearance.SUGGESTED)
+        dialog.set_default_response("restart")
+        dialog.set_close_response("cancel")
+
+        def _on_response(d, response):
+            if response != "restart":
+                # Revert the combo back to the original selection
+                self._lang_row.set_selected(self._lang_initial_idx)
+                return
+            import sys, os
+            i18n.switch_language(lang)
+            app = self._parent_win.get_application()
+            python = sys.executable
+            main_py = os.path.join(os.path.dirname(os.path.abspath(__file__)), "main.py")
+            app.connect("shutdown", lambda _: os.execv(python, [python, main_py]))
+            app.quit()
+
+        dialog.connect("response", _on_response)
+        dialog.present(self)
 
     def _update_status(self, path: str):
         from pathlib import Path
         if (Path(path) / "data").exists():
-            self.status_row.set_subtitle("Ruta válida — carpeta 'data' encontrada")
+            self.status_row.set_subtitle(_("Valid path — 'data' folder found"))
             self.status_row.remove_css_class("error")
             self.status_row.add_css_class("success")
         else:
-            self.status_row.set_subtitle("Ruta inválida — no se encontró carpeta 'data'")
+            self.status_row.set_subtitle(_("Invalid path — 'data' folder not found"))
             self.status_row.remove_css_class("success")
             self.status_row.add_css_class("error")
 
     def _on_choose_folder(self, _):
         dialog = Gtk.FileDialog()
-        dialog.set_title("Seleccionar carpeta de Helldivers 2")
+        dialog.set_title(_("Select Helldivers 2 folder"))
         dialog.select_folder(self, None, self._on_folder_selected)
 
     def _on_folder_selected(self, dialog, result):
@@ -801,11 +884,11 @@ class SettingsWindow(Adw.PreferencesWindow):
             self.path_row.set_subtitle(path)
             self._update_status(path)
         except Exception as e:
-            logger.error("Error al seleccionar carpeta del juego", exc=e)
+            logger.error("Error selecting game folder", exc=e)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Aplicación
+# Application
 # ══════════════════════════════════════════════════════════════════════════════
 
 class HD2ModManagerApp(Adw.Application):
@@ -813,6 +896,6 @@ class HD2ModManagerApp(Adw.Application):
         super().__init__(application_id="com.edd.hd2modmanager")
 
     def do_activate(self):
-        logger.info(f"HD2 Mod Manager iniciado (versión {get_version()})")
+        logger.info(f"HD2 Mod Manager started (version {get_version()})")
         win = MainWindow(self)
         win.present()
