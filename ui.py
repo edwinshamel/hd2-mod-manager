@@ -4,6 +4,8 @@ gi.require_version("Adw", "1")
 from gi.repository import Gtk, Adw, Gio, GLib
 import mod_manager as mm
 import logger
+import updater
+from version import VERSION
 
 
 class ModRow(Adw.ActionRow):
@@ -112,8 +114,60 @@ class MainWindow(Adw.ApplicationWindow):
         self.mod_rows = {}
         self.refresh_mods()
 
-        # Abrir configuración automáticamente si no hay ruta válida configurada
+        # Verificar primera ejecución
         GLib.idle_add(self._check_first_run)
+
+        # Verificar actualizaciones de la app en segundo plano
+        updater.check_for_app_update(self._on_update_available)
+
+    def _on_update_available(self, latest_tag: str):
+        logger.info(f"Mostrando diálogo de actualización: {latest_tag}")
+        dialog = Adw.MessageDialog(
+            transient_for=self,
+            heading="Actualización disponible",
+            body=f"Hay una nueva versión de HD2 Mod Manager.\n\nVersión actual: {VERSION}\nNueva versión: {latest_tag}\n\n¿Deseas actualizar ahora?",
+        )
+        dialog.add_response("later", "Después")
+        dialog.add_response("update", "Actualizar ahora")
+        dialog.set_response_appearance("update", Adw.ResponseAppearance.SUGGESTED)
+        dialog.connect("response", self._on_update_response)
+        dialog.present()
+        return False
+
+    def _on_update_response(self, dialog, response: str):
+        if response != "update":
+            logger.info("Usuario pospuso la actualización de la app.")
+            return
+
+        logger.info("Usuario aceptó actualizar la app, ejecutando git pull...")
+        self.show_toast("Actualizando... por favor espera.", success=True)
+
+        updater.apply_update(
+            on_success=self._on_update_success,
+            on_failure=self._on_update_failure,
+        )
+
+    def _on_update_success(self):
+        logger.info("Actualización exitosa, reiniciando app...")
+        dialog = Adw.MessageDialog(
+            transient_for=self,
+            heading="Actualización completada",
+            body="La app se actualizó correctamente. Se reiniciará ahora.",
+        )
+        dialog.add_response("restart", "Reiniciar")
+        dialog.set_response_appearance("restart", Adw.ResponseAppearance.SUGGESTED)
+        dialog.connect("response", lambda d, r: updater.restart())
+        dialog.present()
+
+    def _on_update_failure(self, msg: str):
+        logger.error(f"Falló la actualización de la app: {msg}")
+        dialog = Adw.MessageDialog(
+            transient_for=self,
+            heading="Error al actualizar",
+            body=f"No se pudo actualizar la app:\n\n{msg}",
+        )
+        dialog.add_response("close", "Cerrar")
+        dialog.present()
 
     def _check_first_run(self):
         config = mm.load_config()
@@ -360,6 +414,6 @@ class HD2ModManagerApp(Adw.Application):
         super().__init__(application_id="com.edd.hd2modmanager")
 
     def do_activate(self):
-        logger.info("HD2 Mod Manager iniciado")
+        logger.info(f"HD2 Mod Manager iniciado (versión {VERSION})")
         win = MainWindow(self)
         win.present()
