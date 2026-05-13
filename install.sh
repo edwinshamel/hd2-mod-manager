@@ -69,7 +69,7 @@ cat > "$DESKTOP_FILE" <<EOF
 Name=HD2 Mod Manager
 Comment=Gestor de mods para Helldivers 2
 Exec=python3 $INSTALL_DIR/main.py
-Icon=applications-games
+Icon=$INSTALL_DIR/assets/icon.png
 Terminal=false
 Type=Application
 Categories=Game;Utility;
