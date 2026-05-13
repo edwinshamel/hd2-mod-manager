@@ -28,15 +28,15 @@ info "Detectando gestor de paquetes..."
 if command -v apt &>/dev/null; then
     PKG_MANAGER="apt"
     PKG_INSTALL="sudo apt-get install -y"
-    DEPS="python3 git python3-gi python3-gi-cairo gir1.2-gtk-4.0 gir1.2-adw-1 python3-requests"
+    DEPS="python3 git python3-gi python3-gi-cairo gir1.2-gtk-4.0 gir1.2-adw-1 python3-requests python3-packaging"
 elif command -v dnf &>/dev/null; then
     PKG_MANAGER="dnf"
     PKG_INSTALL="sudo dnf install -y"
-    DEPS="python3 git python3-gobject gtk4 libadwaita python3-requests"
+    DEPS="python3 git python3-gobject gtk4 libadwaita python3-requests python3-packaging"
 elif command -v pacman &>/dev/null; then
     PKG_MANAGER="pacman"
     PKG_INSTALL="sudo pacman -S --noconfirm"
-    DEPS="python git python-gobject gtk4 libadwaita python-requests"
+    DEPS="python git python-gobject gtk4 libadwaita python-requests python-packaging"
 else
     error "No se encontró un gestor de paquetes compatible (apt, dnf, pacman)."
 fi
