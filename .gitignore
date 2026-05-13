@@ -1,0 +1,12 @@
+# Datos locales del usuario
+logs/
+backups/
+mods/
+disabled/
+mods_index.json
+config.json
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
