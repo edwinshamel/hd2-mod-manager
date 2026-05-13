@@ -6,9 +6,8 @@ import requests
 from packaging.version import Version
 from gi.repository import GLib
 import logger
-from version import VERSION, REPO
+from app_meta import get_version, get_repo
 
-GITHUB_TAGS_URL = f"https://api.github.com/repos/{REPO}/tags"
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
@@ -19,9 +18,10 @@ def _parse_version(tag: str) -> str:
 
 def _fetch_latest_tag() -> str | None:
     """Consulta la API de GitHub y retorna el tag más reciente o None si falla."""
+    url = f"https://api.github.com/repos/{get_repo()}/tags"
     try:
-        logger.debug(f"Consultando tags en: {GITHUB_TAGS_URL}")
-        response = requests.get(GITHUB_TAGS_URL, timeout=5)
+        logger.debug(f"Consultando tags en: {url}")
+        response = requests.get(url, timeout=5)
         response.raise_for_status()
         tags = response.json()
         if not tags:
@@ -76,7 +76,7 @@ def check_for_app_update(on_update_available):
             return
 
         latest_version = _parse_version(latest_tag)
-        current_version = VERSION
+        current_version = get_version()
 
         try:
             if Version(latest_version) > Version(current_version):

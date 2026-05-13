@@ -5,7 +5,7 @@ from gi.repository import Gtk, Adw, Gio, GLib
 import mod_manager as mm
 import logger
 import updater
-from version import VERSION
+from app_meta import get_version
 
 
 class ModRow(Adw.ActionRow):
@@ -125,7 +125,7 @@ class MainWindow(Adw.ApplicationWindow):
         dialog = Adw.MessageDialog(
             transient_for=self,
             heading="Actualización disponible",
-            body=f"Hay una nueva versión de HD2 Mod Manager.\n\nVersión actual: {VERSION}\nNueva versión: {latest_tag}\n\n¿Deseas actualizar ahora?",
+            body=f"Hay una nueva versión de HD2 Mod Manager.\n\nVersión actual: {get_version()}\nNueva versión: {latest_tag}\n\n¿Deseas actualizar ahora?",
         )
         dialog.add_response("later", "Después")
         dialog.add_response("update", "Actualizar ahora")
@@ -414,6 +414,6 @@ class HD2ModManagerApp(Adw.Application):
         super().__init__(application_id="com.edd.hd2modmanager")
 
     def do_activate(self):
-        logger.info(f"HD2 Mod Manager iniciado (versión {VERSION})")
+        logger.info(f"HD2 Mod Manager iniciado (versión {get_version()})")
         win = MainWindow(self)
         win.present()
