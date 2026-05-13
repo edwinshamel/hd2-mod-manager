@@ -1,0 +1,86 @@
+NEXUS MODS - APPLICATION REGISTRATION REQUEST
+=============================================
+
+Para enviar a: support@nexusmods.com
+Asunto: Application Registration Request - HD2 Mod Manager
+
+---
+
+Dear Nexus Mods Support Team,
+
+I am writing to request the official registration of my application,
+HD2 Mod Manager, in accordance with the API Acceptable Use Policy.
+
+APPLICATION DETAILS
+-------------------
+Name:        HD2 Mod Manager
+Version:     1.1.0
+Platform:    Linux (GTK4 + Libadwaita)
+License:     Open Source (public GitHub repository)
+Repository:  https://github.com/edwinshamel/hd2-mod-manager
+Logo:        assets/icon.png (attached — high resolution, visible on dark background)
+
+DESCRIPTION
+-----------
+HD2 Mod Manager is an open-source GTK4 graphical mod manager for
+Helldivers 2 on Linux. It allows users to:
+
+  - Browse trending and recently updated mods for Helldivers 2
+    directly from Nexus Mods via the official API
+  - View mod details: name, author, version, description, thumbnail,
+    endorsement count and download count
+  - Open any mod page in the browser with one click
+  - Install mods from locally downloaded ZIP files (no direct download
+    via API — users download manually from nexusmods.com)
+  - Toggle mods on/off, verify file integrity, and uninstall with
+    automatic restoration of original game files
+
+API USAGE
+---------
+Endpoints used:
+  - GET /v1/games/helldivers2/mods/trending.json
+  - GET /v1/games/helldivers2/mods/updated.json?period=1w
+  - GET /v1/games/helldivers2/mods/{mod_id}.json
+  - GET /v1/games/helldivers2/mods/{mod_id}/files.json
+
+Usage patterns:
+  - All requests are initiated by explicit user actions (opening the
+    Explore tab or refreshing the list)
+  - Results are cached in memory for 5 minutes per session to minimize
+    API requests
+  - Estimated worst-case: ~22 requests per session
+  - No server-side storage of API keys
+  - No scraping or mass data fetching
+  - No use of download link endpoints
+  - Request headers always include Application-Name and Application-Version
+
+Current state:
+  - Using a personal API key during testing/development phase
+  - The application is public on GitHub but intended for Linux users
+    familiar with the modding community
+  - Ready for registration and SSO integration once approved
+
+CONTACT
+-------
+Developer:   Edwin Guzman
+Email:       edwin_shamel@hotmail.com
+GitHub:      https://github.com/edwinshamel
+
+We look forward to your response and are happy to make any adjustments
+required to comply with your policies.
+
+Thank you,
+Edwin Guzman
+
+---
+
+NOTAS PARA EL DESARROLLADOR
+============================
+- Adjuntar assets/icon.png al correo
+- Una vez aprobado, Nexus provee:
+    * Application API key (reemplaza la personal key)
+    * SSO slug para autenticacion en la app
+- Con el SSO, cada usuario se autentica con su propia cuenta
+  desde dentro de la app (boton "Conectar con Nexus Mods")
+- Eliminar key.json del flujo y reemplazar por SSO
+- Referencia SSO: https://github.com/Nexus-Mods/sso-integration-demo

@@ -6,6 +6,9 @@ disabled/
 mods_index.json
 config.json
 
+# API keys — nunca al repositorio
+key.json
+
 # Python
 __pycache__/
 *.pyc
