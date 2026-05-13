@@ -185,71 +185,103 @@ class MyModsPage(Gtk.Box):
 # Pestaña: Explorar
 # ══════════════════════════════════════════════════════════════════════════════
 
-class NexusModRow(Adw.ActionRow):
-    """Fila de un mod del catálogo de Nexus Mods."""
+class NexusModRow(Gtk.ListBoxRow):
+    """
+    Fila de un mod del catálogo de Nexus Mods.
+    Usa Gtk.ListBoxRow en lugar de Adw.ActionRow para poder incluir
+    una descripción multilínea sin romper el layout interno de ActionRow.
+    """
 
     def __init__(self, mod: dict, on_install, on_open):
         super().__init__()
         self.mod = mod
-        self.set_title(mod["name"])
-        self.set_subtitle(
-            f"{mod['author']}  ·  v{mod['version']}  ·  "
-            f"★ {mod['endorsement_count']:,}  ·  "
-            f"↓ {mod['mod_unique_downloads']:,}"
-        )
-        self.set_activatable(False)
 
-        # Miniatura — placeholder mientras carga
-        self._thumb = Gtk.Picture()
-        self._thumb.set_size_request(64, 64)
-        self._thumb.set_content_fit(Gtk.ContentFit.COVER)
+        # Contenedor raíz de la fila
+        outer = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        outer.set_margin_top(10)
+        outer.set_margin_bottom(10)
+        outer.set_margin_start(12)
+        outer.set_margin_end(8)
+        self.set_child(outer)
+
+        # ── Miniatura ────────────────────────────────────────────────────────
+        self._thumb = Gtk.Image()
+        self._thumb.set_size_request(72, 72)
+        self._thumb.set_valign(Gtk.Align.START)
+        self._thumb.set_icon_name("image-loading-symbolic")
+        self._thumb.set_icon_size(Gtk.IconSize.LARGE)
         self._thumb.add_css_class("rounded")
-        self.add_prefix(self._thumb)
+        outer.append(self._thumb)
 
-        # Descripción breve debajo del subtítulo usando widget extra
+        # ── Contenido central (título + subtítulo + descripción) ─────────────
+        content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        content.set_hexpand(True)
+        content.set_valign(Gtk.Align.CENTER)
+        outer.append(content)
+
+        title_lbl = Gtk.Label(label=mod["name"])
+        title_lbl.set_xalign(0)
+        title_lbl.set_wrap(True)
+        title_lbl.set_wrap_mode(gi.repository.Pango.WrapMode.WORD_CHAR)
+        title_lbl.add_css_class("heading")
+        content.append(title_lbl)
+
+        subtitle_lbl = Gtk.Label(
+            label=f"{mod['author']}  ·  v{mod['version']}  ·  "
+                  f"★ {mod['endorsement_count']:,}  ·  ↓ {mod['mod_unique_downloads']:,}"
+        )
+        subtitle_lbl.set_xalign(0)
+        subtitle_lbl.add_css_class("caption")
+        subtitle_lbl.add_css_class("dim-label")
+        content.append(subtitle_lbl)
+
         if mod.get("summary"):
             summary = mod["summary"]
-            if len(summary) > 120:
-                summary = summary[:120].rstrip() + "…"
-            desc = Gtk.Label(label=summary)
-            desc.set_wrap(True)
-            desc.set_xalign(0)
-            desc.add_css_class("dim-label")
-            desc.set_margin_top(2)
-            desc.set_margin_bottom(6)
-            desc.set_margin_start(8)
-            desc.set_margin_end(8)
-            self.set_child(desc)
+            if len(summary) > 140:
+                summary = summary[:140].rstrip() + "…"
+            desc_lbl = Gtk.Label(label=summary)
+            desc_lbl.set_xalign(0)
+            desc_lbl.set_wrap(True)
+            desc_lbl.set_wrap_mode(gi.repository.Pango.WrapMode.WORD_CHAR)
+            desc_lbl.add_css_class("caption")
+            desc_lbl.set_margin_top(4)
+            content.append(desc_lbl)
 
-        # Botón Ver en Nexus
+        # ── Botones ──────────────────────────────────────────────────────────
+        btn_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        btn_box.set_valign(Gtk.Align.CENTER)
+        outer.append(btn_box)
+
         open_btn = Gtk.Button()
         open_btn.set_icon_name("web-browser-symbolic")
         open_btn.set_tooltip_text("Ver en Nexus Mods")
-        open_btn.set_valign(Gtk.Align.CENTER)
         open_btn.add_css_class("flat")
         open_btn.connect("clicked", lambda _: on_open(mod["mod_id"]))
-        self.add_suffix(open_btn)
+        btn_box.append(open_btn)
 
-        # Botón Instalar
         install_btn = Gtk.Button()
         install_btn.set_icon_name("list-add-symbolic")
         install_btn.set_tooltip_text("Instalar mod")
-        install_btn.set_valign(Gtk.Align.CENTER)
         install_btn.add_css_class("flat")
         install_btn.add_css_class("suggested-action")
         install_btn.connect("clicked", lambda _: on_install(mod))
-        self.add_suffix(install_btn)
+        btn_box.append(install_btn)
 
     def set_thumbnail_bytes(self, data: bytes):
-        """Carga la miniatura desde bytes (llamado desde hilo secundario via GLib.idle_add)."""
+        """Carga la miniatura desde bytes. Llamado desde el hilo principal via GLib.idle_add."""
         try:
             loader = GdkPixbuf.PixbufLoader()
             loader.write(data)
             loader.close()
             pixbuf = loader.get_pixbuf()
-            # Escalar a 64x64 manteniendo aspecto
-            scaled = pixbuf.scale_simple(64, 64, GdkPixbuf.InterpType.BILINEAR)
-            self._thumb.set_pixbuf(scaled)
+            # Recortar al centro y escalar a 72x72
+            w, h = pixbuf.get_width(), pixbuf.get_height()
+            side = min(w, h)
+            x = (w - side) // 2
+            y = (h - side) // 2
+            cropped = pixbuf.new_subpixbuf(x, y, side, side)
+            scaled = cropped.scale_simple(72, 72, GdkPixbuf.InterpType.BILINEAR)
+            self._thumb.set_from_pixbuf(scaled)
         except Exception as e:
             logger.error(f"Error cargando miniatura: {e}")
 
@@ -321,7 +353,7 @@ class ExplorePage(Gtk.Box):
         open_nexus_btn.set_halign(Gtk.Align.CENTER)
         open_nexus_btn.add_css_class("suggested-action")
         open_nexus_btn.add_css_class("pill")
-        open_nexus_btn.connect("clicked", lambda _: nexus_api.open_mod_page(""))
+        open_nexus_btn.connect("clicked", lambda _: Gtk.show_uri(None, "https://www.nexusmods.com/helldivers2/mods", 0))
         self._key_status_page.set_child(open_nexus_btn)
         self._stack.add_named(self._key_status_page, "no_key")
 
@@ -348,8 +380,23 @@ class ExplorePage(Gtk.Box):
         list_box.set_margin_end(12)
         scroll.set_child(list_box)
 
-        self._mods_group = Adw.PreferencesGroup()
-        self._mods_group.set_title("Mods de Helldivers 2")
+        # Título del grupo
+        group_title = Gtk.Label(label="Mods de Helldivers 2")
+        group_title.set_xalign(0)
+        group_title.add_css_class("heading")
+        group_title.set_margin_bottom(4)
+        list_box.append(group_title)
+
+        self._group_description = Gtk.Label(label="")
+        self._group_description.set_xalign(0)
+        self._group_description.add_css_class("dim-label")
+        self._group_description.add_css_class("caption")
+        self._group_description.set_margin_bottom(8)
+        list_box.append(self._group_description)
+
+        self._mods_group = Gtk.ListBox()
+        self._mods_group.set_selection_mode(Gtk.SelectionMode.NONE)
+        self._mods_group.add_css_class("boxed-list")
         list_box.append(self._mods_group)
 
         # Pie de lista — aviso API personal
@@ -402,11 +449,11 @@ class ExplorePage(Gtk.Box):
 
         for mod in mods:
             row = NexusModRow(mod, self._on_install, self._on_open_mod)
-            self._mods_group.add(row)
+            self._mods_group.append(row)
             self._mod_rows[mod["mod_id"]] = row
 
         title_mode = "Trending" if self._mode_btn.get_selected() == 0 else "Actualizados esta semana"
-        self._mods_group.set_description(f"{title_mode} · {len(mods)} mods")
+        self._group_description.set_label(f"{title_mode} · {len(mods)} mods")
 
     def _load_thumbnails(self, mods: list[dict]):
         """Descarga miniaturas en hilos separados y las aplica via GLib.idle_add."""
