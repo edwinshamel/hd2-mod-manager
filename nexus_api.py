@@ -1,8 +1,6 @@
-import json
 import subprocess
 import threading
 import time
-from pathlib import Path
 
 import requests
 
@@ -10,9 +8,8 @@ import logger
 from app_meta import get_version
 
 # ── Constantes ────────────────────────────────────────────────────────────────
-_KEY_FILE = Path(__file__).parent / "key.json"
+_GRAPHQL_URL = "https://api.nexusmods.com/v2/graphql"
 _GAME_DOMAIN = "helldivers2"
-_BASE_URL = "https://api.nexusmods.com/v1"
 _MOD_PAGE_URL = "https://www.nexusmods.com/{domain}/mods/{mod_id}"
 _CACHE_TTL = 300  # segundos (5 minutos)
 _MAX_MODS = 20
@@ -20,7 +17,7 @@ _MAX_MODS = 20
 
 # ── Excepciones ───────────────────────────────────────────────────────────────
 class KeyNotConfiguredError(Exception):
-    """key.json no existe o no contiene una api_key válida."""
+    """Mantenida por compatibilidad con ui.py; ya no se lanza en consultas de exploración."""
 
 
 class NexusApiError(Exception):
@@ -29,6 +26,19 @@ class NexusApiError(Exception):
 
 # ── Caché en memoria (por sesión) ─────────────────────────────────────────────
 _cache: dict[str, dict] = {}
+
+# ── Estado de paginación por fuente ──────────────────────────────────────────
+_page_state: dict[str, dict] = {
+    "trending": {"offset": 0, "exhausted": False},
+    "latest":   {"offset": 0, "exhausted": False},
+    "updated":  {"offset": 0, "exhausted": False},
+}
+
+_SORTS: dict[str, list[dict]] = {
+    "trending": [{"endorsements": {"direction": "DESC"}}],
+    "latest":   [{"createdAt": {"direction": "DESC"}}],
+    "updated":  [{"updatedAt": {"direction": "DESC"}}],
+}
 
 
 def _cache_get(key: str):
@@ -43,45 +53,30 @@ def _cache_set(key: str, data):
     _cache[key] = {"data": data, "ts": time.time()}
 
 
-# ── API key ───────────────────────────────────────────────────────────────────
-def get_api_key() -> str:
-    """Lee key.json y retorna la api_key. Lanza KeyNotConfiguredError si falla."""
-    if not _KEY_FILE.exists():
-        raise KeyNotConfiguredError(f"No se encontró {_KEY_FILE}")
-    try:
-        with open(_KEY_FILE, "r") as f:
-            data = json.load(f)
-        key = data.get("api_key", "").strip()
-        if not key:
-            raise KeyNotConfiguredError("api_key está vacía en key.json")
-        return key
-    except json.JSONDecodeError as e:
-        raise KeyNotConfiguredError(f"key.json no es JSON válido: {e}")
+# ── GraphQL helper ────────────────────────────────────────────────────────────
+def _graphql(query: str, variables: dict | None = None) -> dict:
+    """Ejecuta una query GraphQL contra la API v2 de Nexus Mods."""
+    payload: dict = {"query": query}
+    if variables:
+        payload["variables"] = variables
 
-
-def _headers() -> dict:
-    return {
-        "apikey": get_api_key(),
+    headers = {
+        "Content-Type": "application/json",
         "Application-Name": "hd2-mod-manager",
         "Application-Version": get_version(),
     }
 
-
-def _get(endpoint: str) -> dict | list:
-    """Realiza un GET a la API de Nexus Mods con manejo de errores."""
-    url = f"{_BASE_URL}{endpoint}"
-    logger.debug(f"nexus_api GET: {url}")
+    logger.debug("nexus_api: GraphQL POST")
     try:
-        r = requests.get(url, headers=_headers(), timeout=10)
-        remaining = r.headers.get("x-rl-hourly-remaining", "?")
-        logger.debug(f"nexus_api: HTTP {r.status_code} | hourly remaining: {remaining}")
-        if r.status_code == 401:
-            raise KeyNotConfiguredError("API key inválida o expirada (HTTP 401)")
-        if r.status_code == 429:
-            raise NexusApiError("Rate limit alcanzado. Intenta en una hora.")
+        r = requests.post(_GRAPHQL_URL, json=payload, headers=headers, timeout=15)
+        logger.debug(f"nexus_api: HTTP {r.status_code}")
         r.raise_for_status()
-        return r.json()
-    except (KeyNotConfiguredError, NexusApiError):
+        body = r.json()
+        if "errors" in body:
+            msgs = "; ".join(e.get("message", str(e)) for e in body["errors"])
+            raise NexusApiError(f"GraphQL error: {msgs}")
+        return body.get("data", {})
+    except (NexusApiError,):
         raise
     except requests.exceptions.ConnectionError:
         raise NexusApiError("Sin conexión a internet.")
@@ -91,65 +86,81 @@ def _get(endpoint: str) -> dict | list:
         raise NexusApiError(f"Error inesperado: {e}")
 
 
+# ── Query compartida de mods ──────────────────────────────────────────────────
+_MODS_QUERY = """
+query GetMods($filter: ModsFilter, $sort: [ModsSort!], $count: Int, $offset: Int) {
+  mods(filter: $filter, sort: $sort, count: $count, offset: $offset) {
+    nodes {
+      modId
+      name
+      summary
+      version
+      author
+      pictureUrl
+      thumbnailUrl
+      downloads
+      endorsements
+      adultContent
+      updatedAt
+      status
+    }
+    totalCount
+  }
+}
+"""
+
+_BASE_FILTER = {
+    "op": "AND",
+    "filter": [
+        {"gameDomainName": [{"value": "helldivers2", "op": "EQUALS"}]},
+        {"status": [{"value": "published", "op": "EQUALS"}]},
+    ],
+}
+
+
+def _fetch_mods(sort: list[dict], cache_key: str, offset: int = 0) -> list[dict]:
+    if offset == 0:
+        cached = _cache_get(cache_key)
+        if cached is not None:
+            return cached
+
+    data = _graphql(_MODS_QUERY, {
+        "filter": _BASE_FILTER,
+        "sort": sort,
+        "count": _MAX_MODS,
+        "offset": offset,
+    })
+    nodes = data.get("mods", {}).get("nodes", [])
+    mods = _normalize_mods(nodes)
+    if offset == 0:
+        _cache_set(cache_key, mods)
+    logger.info(f"nexus_api: {len(mods)} mods obtenidos ({cache_key}, offset={offset})")
+    return mods
+
+
 # ── Funciones públicas ────────────────────────────────────────────────────────
 def get_trending_mods() -> list[dict]:
-    """
-    Retorna hasta _MAX_MODS mods trending de Helldivers 2.
-    Usa caché de sesión (5 minutos).
-    """
-    cached = _cache_get("trending")
-    if cached is not None:
-        return cached
-
-    data = _get(f"/games/{_GAME_DOMAIN}/mods/trending.json")
-    mods = _normalize_mods(data[:_MAX_MODS])
-    _cache_set("trending", mods)
-    logger.info(f"nexus_api: {len(mods)} mods trending obtenidos")
-    return mods
+    """Retorna hasta _MAX_MODS mods más endorsados de Helldivers 2."""
+    return _fetch_mods(
+        sort=_SORTS["trending"],
+        cache_key="trending",
+    )
 
 
 def get_updated_mods() -> list[dict]:
-    """
-    Retorna hasta _MAX_MODS mods actualizados en la última semana.
-    Obtiene la lista de IDs y luego el detalle de cada uno.
-    Usa caché de sesión (5 minutos).
-    """
-    cached = _cache_get("updated")
-    if cached is not None:
-        return cached
-
-    updated = _get(f"/games/{_GAME_DOMAIN}/mods/updated.json?period=1w")
-    # Ordenar por latest_mod_activity desc y tomar los primeros _MAX_MODS
-    updated_sorted = sorted(updated, key=lambda x: x.get("latest_mod_activity", 0), reverse=True)
-    mod_ids = [m["mod_id"] for m in updated_sorted[:_MAX_MODS]]
-
-    mods = []
-    for mod_id in mod_ids:
-        try:
-            detail = _get(f"/games/{_GAME_DOMAIN}/mods/{mod_id}.json")
-            if detail.get("available") and detail.get("status") == "published":
-                mods.append(_normalize_mod(detail))
-        except NexusApiError as e:
-            logger.error(f"nexus_api: error obteniendo mod {mod_id}: {e}")
-            continue
-
-    _cache_set("updated", mods)
-    logger.info(f"nexus_api: {len(mods)} mods actualizados obtenidos")
-    return mods
+    """Retorna hasta _MAX_MODS mods actualizados recientemente."""
+    return _fetch_mods(
+        sort=_SORTS["updated"],
+        cache_key="updated",
+    )
 
 
-def get_mod_files(mod_id: int) -> list[dict]:
-    """
-    Retorna los archivos principales de un mod (MAIN o is_primary).
-    """
-    data = _get(f"/games/{_GAME_DOMAIN}/mods/{mod_id}/files.json")
-    files = data.get("files", [])
-    # Priorizar archivos MAIN o marcados como primarios
-    main_files = [
-        f for f in files
-        if f.get("is_primary") or f.get("category_name") in ("MAIN", "Main")
-    ]
-    return main_files if main_files else files[-1:] if files else []
+def get_latest_added_mods() -> list[dict]:
+    """Retorna hasta _MAX_MODS mods más recientes de Helldivers 2."""
+    return _fetch_mods(
+        sort=_SORTS["latest"],
+        cache_key="latest_added",
+    )
 
 
 def open_mod_page(mod_id: int):
@@ -182,79 +193,121 @@ def download_thumbnail(url: str) -> bytes | None:
         return None
 
 
-def get_latest_added_mods() -> list[dict]:
-    """
-    Retorna los 10 mods más recientes de Helldivers 2.
-    Usa caché de sesión (5 minutos).
-    """
-    cached = _cache_get("latest_added")
-    if cached is not None:
-        return cached
-
-    data = _get(f"/games/{_GAME_DOMAIN}/mods/latest_added.json")
-    mods = _normalize_mods(data)
-    _cache_set("latest_added", mods)
-    logger.info(f"nexus_api: {len(mods)} mods recientes obtenidos")
-    return mods
-
-
 def fetch_pool_async(on_success, on_error):
     """
-    Carga en paralelo trending + updated + latest_added y los combina
-    en un único pool deduplicado (por mod_id).
-    on_success(pool): lista de dicts, llamado desde hilo secundario — usar GLib.idle_add
-    on_error(err):   tupla (kind, msg), llamado desde hilo secundario
+    Carga la primera página (trending + latest + updated) y resetea el estado
+    de paginación. Llama on_success(pool) o on_error((kind, msg)) desde hilo
+    secundario — usar GLib.idle_add en los callbacks.
     """
+    # Resetear estado de paginación
+    for key in _page_state:
+        _page_state[key]["offset"] = 0
+        _page_state[key]["exhausted"] = False
+
     def _run():
         try:
             pool: dict[int, dict] = {}
-
-            # Cargar las tres fuentes; updated es la más lenta (muchos requests)
-            for getter in (get_trending_mods, get_latest_added_mods, get_updated_mods):
+            sources = [
+                ("trending", get_trending_mods),
+                ("latest",   get_latest_added_mods),
+                ("updated",  get_updated_mods),
+            ]
+            for key, getter in sources:
                 try:
-                    for mod in getter():
+                    mods = getter()
+                    _page_state[key]["offset"] = len(mods)
+                    if len(mods) < _MAX_MODS:
+                        _page_state[key]["exhausted"] = True
+                    for mod in mods:
                         mid = mod["mod_id"]
                         if mid not in pool:
                             pool[mid] = mod
                 except NexusApiError as e:
-                    logger.error(f"nexus_api: error parcial en pool: {e}")
-                    # No abortar: continuar con las otras fuentes
+                    logger.error(f"nexus_api: error parcial en pool ({key}): {e}")
 
             if not pool:
                 raise NexusApiError("No se pudieron obtener mods de ninguna fuente.")
 
             result = list(pool.values())
-            logger.info(f"nexus_api: pool combinado = {len(result)} mods únicos")
+            logger.info(f"nexus_api: pool inicial = {len(result)} mods únicos")
             on_success(result)
-        except KeyNotConfiguredError as e:
-            on_error(("key_missing", str(e)))
         except NexusApiError as e:
             on_error(("api_error", str(e)))
 
     threading.Thread(target=_run, daemon=True).start()
 
 
+def fetch_more_async(on_success, on_error):
+    """
+    Carga la siguiente página de cada fuente no agotada y devuelve los mods
+    nuevos (deduplicados contra existing_ids).
+    on_success(new_mods, all_exhausted): lista de dicts nuevos + bool si ya no hay más
+    on_error((kind, msg))
+    """
+    def _run():
+        try:
+            new_mods: dict[int, dict] = {}
+            any_active = False
+
+            sources = [
+                ("trending", _SORTS["trending"]),
+                ("latest",   _SORTS["latest"]),
+                ("updated",  _SORTS["updated"]),
+            ]
+            for key, sort in sources:
+                state = _page_state[key]
+                if state["exhausted"]:
+                    continue
+                any_active = True
+                try:
+                    mods = _fetch_mods(sort=sort, cache_key=key, offset=state["offset"])
+                    state["offset"] += len(mods)
+                    if len(mods) < _MAX_MODS:
+                        state["exhausted"] = True
+                    for mod in mods:
+                        mid = mod["mod_id"]
+                        if mid not in new_mods:
+                            new_mods[mid] = mod
+                except NexusApiError as e:
+                    logger.error(f"nexus_api: error en fetch_more ({key}): {e}")
+
+            all_exhausted = all(s["exhausted"] for s in _page_state.values())
+            result = list(new_mods.values())
+            logger.info(f"nexus_api: {len(result)} mods nuevos cargados (exhausted={all_exhausted})")
+            on_success(result, all_exhausted)
+        except Exception as e:
+            on_error(("api_error", str(e)))
+
+    threading.Thread(target=_run, daemon=True).start()
+
+
+def all_sources_exhausted() -> bool:
+    """Retorna True si todas las fuentes de paginación ya fueron cargadas completamente."""
+    return all(s["exhausted"] for s in _page_state.values())
+
 
 # ── Helpers internos ──────────────────────────────────────────────────────────
 def _normalize_mod(raw: dict) -> dict:
-    """Normaliza un dict de mod de la API a la estructura interna."""
+    """Normaliza un nodo Mod de la API GraphQL v2 a la estructura interna."""
+    downloads = raw.get("downloads", 0) or 0
     return {
-        "mod_id": raw.get("mod_id"),
+        "mod_id": raw.get("modId"),
         "name": raw.get("name", "Sin nombre"),
         "summary": raw.get("summary", ""),
         "version": raw.get("version", ""),
         "author": raw.get("author", ""),
-        "picture_url": raw.get("picture_url", ""),
-        "mod_downloads": raw.get("mod_downloads", 0),
-        "mod_unique_downloads": raw.get("mod_unique_downloads", 0),
-        "endorsement_count": raw.get("endorsement_count", 0),
-        "updated_time": raw.get("updated_time", ""),
-        "contains_adult_content": raw.get("contains_adult_content", False),
+        "picture_url": raw.get("pictureUrl", "") or "",
+        "thumbnail_url": raw.get("thumbnailUrl", "") or "",
+        "mod_downloads": downloads,
+        "mod_unique_downloads": downloads,  # V2 no expone uniqueDownloads en Mod; usamos total
+        "endorsement_count": raw.get("endorsements", 0) or 0,
+        "updated_time": raw.get("updatedAt", ""),
+        "contains_adult_content": raw.get("adultContent", False),
     }
 
 
 def _normalize_mods(raw_list: list) -> list[dict]:
     return [
         _normalize_mod(m) for m in raw_list
-        if m.get("available") and m.get("status") == "published"
+        if m.get("status") == "published"
     ]

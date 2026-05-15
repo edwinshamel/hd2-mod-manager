@@ -59,7 +59,14 @@ else
     success "Repository cloned."
 fi
 
-# ── 4. Create .desktop file ──────────────────────────────────────────────────
+# ── 4. Install icon ──────────────────────────────────────────────────────────
+info "Installing application icon..."
+mkdir -p "$HOME/.local/share/icons/hicolor/256x256/apps"
+cp "$INSTALL_DIR/assets/icon-hd2.png" "$HOME/.local/share/icons/hicolor/256x256/apps/hd2-mod-manager.png"
+gtk-update-icon-cache -f "$HOME/.local/share/icons/hicolor/" 2>/dev/null || true
+success "Icon installed."
+
+# ── 5. Create .desktop file ──────────────────────────────────────────────────
 info "Creating application shortcut..."
 
 mkdir -p "$HOME/.local/share/applications"
@@ -69,19 +76,20 @@ cat > "$DESKTOP_FILE" <<EOF
 Name=HD2 Mod Manager
 Comment=Mod manager for Helldivers 2
 Exec=python3 $INSTALL_DIR/main.py
-Icon=$INSTALL_DIR/assets/icon.png
+Icon=hd2-mod-manager
 Terminal=false
 Type=Application
 Categories=Game;Utility;
 StartupNotify=true
+StartupWMClass=com.edd.hd2modmanager
 EOF
 
 success "Shortcut created at $DESKTOP_FILE"
 
-# ── 5. Make main.py executable ───────────────────────────────────────────────
+# ── 7. Make main.py executable ───────────────────────────────────────────────
 chmod +x "$INSTALL_DIR/main.py"
 
-# ── 6. Refresh application menu ─────────────────────────────────────────────
+# ── 8. Refresh application menu ─────────────────────────────────────────────
 info "Refreshing application menu..."
 
 case "$XDG_CURRENT_DESKTOP" in
